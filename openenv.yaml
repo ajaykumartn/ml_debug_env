@@ -1,0 +1,68 @@
+name: ml-training-debugger
+version: 1.0.0
+description: >
+  An RL environment where an AI agent debugs broken ML training runs.
+  The agent inspects training logs, metrics, and configurations to identify
+  root causes (diverging loss, data leakage, overfitting) and apply correct fixes.
+author: TriStack Team
+tags:
+  - openenv
+  - ml-debugging
+  - reinforcement-learning
+  - real-world
+
+tasks:
+  - id: easy_lr_divergence
+    difficulty: easy
+    description: Fix a diverging training loss caused by a misconfigured learning rate
+  - id: medium_wrong_loss
+    difficulty: medium
+    description: Fix wrong loss function causing accuracy to stay near random baseline
+  - id: medium_data_leakage
+    difficulty: medium
+    description: Detect and fix data leakage causing unrealistically high validation accuracy
+  - id: hard_overfitting_cascade
+    difficulty: hard
+    description: Diagnose and fix cascading overfitting from multiple missing regularization settings
+  - id: hard_dual_bug
+    difficulty: hard
+    description: Debug two simultaneous failures — overfitting and learning rate instability
+
+observation_space:
+  type: object
+  fields:
+    task_id: string
+    step: integer
+    training_logs: list[string]
+    metrics_history: list[TrainingMetrics]
+    current_config: TrainingConfig
+    system_alerts: list[string]
+    available_actions: list[string]
+    diagnosis_history: list[string]
+    fix_history: list[string]
+    is_training_healthy: boolean
+
+action_space:
+  type: object
+  fields:
+    action_type:
+      type: string
+      enum:
+        - inspect_logs
+        - inspect_metrics
+        - inspect_config
+        - check_data
+        - diagnose_issue
+        - modify_config
+        - apply_fix
+        - restart_training
+        - submit_diagnosis
+    parameters:
+      type: object
+
+reward_range: [0.0, 1.0]
+
+endpoints:
+  reset: POST /reset
+  step: POST /step
+  state: GET /state
