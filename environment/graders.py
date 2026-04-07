@@ -48,9 +48,9 @@ def grade_easy_task(
     score += breakdown["fix_applied"]
 
     # Efficiency bonus
-    if steps_taken <= 3:
+    if steps_taken <= 4:
         breakdown["efficiency"] = 0.2
-    elif steps_taken <= 6:
+    elif steps_taken <= 7:
         breakdown["efficiency"] = 0.1
     else:
         breakdown["efficiency"] = 0.0

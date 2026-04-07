@@ -33,8 +33,7 @@ TASKS: Dict[str, Dict[str, Any]] = {
         "correct_diagnosis": "wrong_loss_function",
         "correct_fix": {"action": "modify_config", "key": "loss_function", "value": "cross_entropy"},
         "grader_type": "medium",
-    },
-    "medium_data_leakage": {
+    },    "medium_data_leakage": {
         "id": "medium_data_leakage",
         "difficulty": "medium",
         "title": "Detect and Fix Data Leakage",

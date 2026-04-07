@@ -101,6 +101,28 @@ def close(req: CloseRequest):
     return result
 
 
+@app.get("/validate")
+def validate():
+    """OpenEnv validation endpoint — confirms spec compliance."""
+    return {
+        "name": "ml-training-debugger",
+        "version": "1.0.0",
+        "spec": "openenv",
+        "tasks": [
+            {"id": tid, "difficulty": t["difficulty"]}
+            for tid, t in TASKS.items()
+        ],
+        "endpoints": {
+            "reset": "POST /reset",
+            "step": "POST /step",
+            "state": "GET /state",
+            "close": "POST /close",
+        },
+        "reward_range": [0.0, 1.0],
+        "status": "valid",
+    }
+
+
 @app.get("/tasks")
 def list_tasks():
     return {
