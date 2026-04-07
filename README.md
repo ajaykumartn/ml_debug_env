@@ -1,3 +1,16 @@
+---
+title: ML Training Debugger
+emoji: 🔧
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+tags:
+  - openenv
+  - reinforcement-learning
+  - ml-debugging
+---
+
 # ML Training Debugger — OpenEnv
 
 [![OpenEnv](https://img.shields.io/badge/OpenEnv-compliant-blue)](https://github.com/openenv)
