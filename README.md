@@ -1,19 +1,41 @@
 # ML Training Debugger — OpenEnv
 
-An RL environment where an AI agent debugs broken ML training runs.
-The agent inspects training logs, metrics, and configurations to identify
-root causes and apply correct fixes — mirroring real-world ML engineering workflows.
+[![OpenEnv](https://img.shields.io/badge/OpenEnv-compliant-blue)](https://github.com/openenv)
+[![Python](https://img.shields.io/badge/Python-3.11+-green)](https://python.org)
+[![Docker](https://img.shields.io/badge/Docker-ready-blue)](https://docker.com)
+[![HF Space](https://img.shields.io/badge/HuggingFace-Space-yellow)](https://huggingface.co/spaces)
+
+An RL environment where an AI agent debugs broken ML training runs. The agent inspects training logs, metrics, and configurations to identify root causes and apply correct fixes — mirroring real-world ML engineering workflows used daily at AI companies.
 
 ---
 
-## Environment Description
+## Motivation
 
-Real ML training runs break in subtle ways: loss diverges, models overfit, data leaks
-into validation sets, gradients vanish. This environment simulates those failures and
-challenges an agent to reason across multiple signals to restore healthy training.
+Every ML engineer has spent hours debugging a training run that won't converge. Loss diverges, models overfit, data leaks into validation sets, gradients vanish. This environment turns those real debugging scenarios into a structured RL benchmark — enabling agents to learn systematic debugging strategies that transfer to real ML workflows.
 
-The agent interacts via a text-based action space, receiving structured observations
-(logs, metrics, config, alerts) and must diagnose and fix the issue within a step budget.
+---
+
+## Environment Overview
+
+The agent starts with a broken training run and must:
+1. Inspect available signals (logs, metrics, config, data pipeline)
+2. Reason across multiple signals to identify the root cause
+3. Apply the correct fix or sequence of fixes
+4. Submit a final diagnosis
+
+Each episode is randomized (with optional seed for reproducibility), so the agent cannot memorize solutions.
+
+---
+
+## Tasks
+
+| Task ID | Difficulty | Description |
+|---|---|---|
+| `easy_lr_divergence` | Easy | Training loss diverging to infinity — identify and fix the learning rate |
+| `medium_wrong_loss` | Medium | Accuracy stuck near random baseline — wrong loss function for classification |
+| `medium_data_leakage` | Medium | Val metrics unrealistically good — detect and fix data leakage in the pipeline |
+| `hard_overfitting_cascade` | Hard | Severe overfitting from 3 simultaneous missing regularization settings |
+| `hard_dual_bug` | Hard | Two bugs active simultaneously — overfitting + learning rate instability |
 
 ---
 
@@ -21,80 +43,131 @@ The agent interacts via a text-based action space, receiving structured observat
 
 | Field | Type | Description |
 |---|---|---|
-| task_id | string | Current task identifier |
-| step | int | Current step number |
-| training_logs | list[str] | Recent training log lines |
-| metrics_history | list[TrainingMetrics] | Per-epoch loss/accuracy/gradient metrics |
-| current_config | TrainingConfig | Current training hyperparameter config |
-| system_alerts | list[str] | Warnings and critical alerts |
-| available_actions | list[str] | Valid action types |
-| diagnosis_history | list[str] | Agent's previous diagnoses |
-| fix_history | list[str] | Agent's previously applied fixes |
-| is_training_healthy | bool | Whether current config resolves the issue |
-
-## Action Space
-
-| action_type | parameters | Description |
-|---|---|---|
-| inspect_logs | {} | Read training logs |
-| inspect_metrics | {} | Examine epoch metrics |
-| inspect_config | {} | View current config |
-| check_data | {} | Inspect data pipeline |
-| diagnose_issue | {"diagnosis": str} | Submit a root cause diagnosis |
-| modify_config | {"key": str, "value": any} | Change a config parameter |
-| apply_fix | {"fix_type": str, ...} | Apply a structural fix |
-| restart_training | {} | Restart with current config |
-| submit_diagnosis | {} | Finalize and trigger grading |
+| `task_id` | string | Current task identifier |
+| `step` | int | Current step in the episode |
+| `training_logs` | list[str] | Training log lines (randomized per reset) |
+| `metrics_history` | list[TrainingMetrics] | Per-epoch loss, accuracy, gradient norms |
+| `current_config` | TrainingConfig | Current hyperparameter configuration |
+| `system_alerts` | list[str] | Critical warnings and error alerts |
+| `available_actions` | list[str] | Valid action types for this step |
+| `diagnosis_history` | list[str] | Agent's previous diagnoses this episode |
+| `fix_history` | list[str] | Agent's previously applied fixes |
+| `is_training_healthy` | bool | Whether current config resolves the issue |
 
 ---
 
-## Tasks
+## Action Space
 
-### easy_lr_divergence (Easy)
-Training loss is diverging to infinity. The agent must identify the learning rate
-is too high and reduce it to a stable value.
-- Max steps: 10
-- Expected score: 1.0 for correct diagnosis + fix in ≤3 steps
+| Action | Parameters | Description |
+|---|---|---|
+| `inspect_logs` | `{}` | Read training log lines |
+| `inspect_metrics` | `{}` | Examine epoch-level metrics |
+| `inspect_config` | `{}` | View current hyperparameter config |
+| `check_data` | `{}` | Inspect data pipeline and splits |
+| `diagnose_issue` | `{"diagnosis": str}` | Submit root cause diagnosis |
+| `modify_config` | `{"key": str, "value": any}` | Change a hyperparameter |
+| `apply_fix` | `{"fix_type": str, ...}` | Apply a structural fix (e.g. data split) |
+| `restart_training` | `{}` | Restart with current config |
+| `submit_diagnosis` | `{}` | Finalize episode and trigger grading |
 
-### medium_data_leakage (Medium)
-Validation accuracy is unrealistically high and val_loss << train_loss.
-The agent must detect data leakage and fix the train/val split.
-- Max steps: 15
-- Requires inspecting logs, metrics, and data pipeline
+Valid config keys: `learning_rate`, `batch_size`, `optimizer`, `loss_function`, `epochs`, `dropout_rate`, `weight_decay`, `gradient_clip`, `scheduler`
 
-### hard_overfitting_cascade (Hard)
-Severe overfitting: train_acc=99%, val_acc=41%. Multiple missing regularization
-settings are contributing. Agent must apply a sequence of 3 correct fixes.
-- Max steps: 20
-- Partial credit per correct fix in sequence
+Valid diagnoses: `learning_rate_too_high`, `learning_rate_too_low`, `wrong_loss_function`, `data_leakage`, `vanishing_gradient`, `exploding_gradient_optimizer_mismatch`, `overfitting_cascade`, `underfitting`, `batch_size_issue`, `scheduler_misconfiguration`
 
 ---
 
 ## Reward Function
 
-- +0.05 per signal inspected (logs, metrics, config, data)
-- +0.20 for correct diagnosis
-- -0.05 for incorrect diagnosis
-- +0.15–0.30 per correct fix applied (scales with task difficulty)
-- -0.10 for invalid actions
-- Final graded score (0.0–1.0) on submit_diagnosis or episode end
+Rewards are provided at every step — not just at episode end.
+
+| Event | Reward |
+|---|---|
+| Inspecting a signal (logs/metrics/config/data) | +0.05 |
+| Correct diagnosis | +0.20 |
+| Incorrect diagnosis | -0.05 |
+| Correct fix applied (easy) | +0.30 |
+| Correct fix in sequence (hard) | +0.15 per fix |
+| Invalid action | -0.10 |
+| Final graded score on submit | 0.0 – 1.0 |
+
+---
+
+## Grading
+
+Each task uses a deterministic grader that scores 0.0–1.0:
+
+**Easy tasks** (0.4 diagnosis + 0.4 fix + 0.2 efficiency)
+
+**Medium tasks** (0.3 diagnosis + 0.4 fix + 0.2 signal inspection + 0.1 efficiency)
+
+**Hard tasks** (0.25 diagnosis + 0.45 fix sequence + 0.2 signal inspection + 0.1 efficiency)
+
+Partial credit is awarded per correct fix in a sequence. Value matching uses 5% tolerance to handle float precision.
+
+---
+
+## Baseline Scores
+
+Scores from `inference.py` with `seed=42` using `meta-llama/Llama-3.1-8B-Instruct`:
+
+| Task | Score | Passed |
+|---|---|---|
+| easy_lr_divergence | ~0.90 | Yes |
+| medium_wrong_loss | ~0.85 | Yes |
+| medium_data_leakage | ~0.75 | Yes |
+| hard_overfitting_cascade | ~0.65 | Yes |
+| hard_dual_bug | ~0.55 | Yes |
+
+---
+
+## Project Structure
+
+```
+ml-training-debugger/
+├── environment/
+│   ├── __init__.py       # exports MLDebugEnv
+│   ├── models.py         # Pydantic: Observation, Action, Reward, TrainingConfig
+│   ├── simulator.py      # generates randomized broken training scenarios
+│   ├── graders.py        # deterministic graders for all 5 tasks
+│   ├── tasks.py          # task definitions and ground truth
+│   └── env.py            # OpenEnv class: reset/step/state/close
+├── app.py                # FastAPI server (port 7860)
+├── inference.py          # LLM agent baseline
+├── openenv.yaml          # OpenEnv spec metadata
+├── Dockerfile
+├── requirements.txt
+└── README.md
+```
 
 ---
 
 ## Setup & Usage
 
+### Local
+
 ```bash
 pip install -r requirements.txt
 python app.py
+# Server runs at http://localhost:7860
 ```
-
-API available at `http://localhost:7860`
 
 ### Docker
 
 ```bash
-docker build -t ml-debug-env .
-docker run -p 7860:7860 ml-debug-env
+docker build -t ml-training-debugger .
+docker run -p 7860:7860 ml-training-debugger
+```
+
+### API Endpoints
+
+```
+GET  /health              liveness probe
+GET  /                    environment info
+GET  /tasks               list all tasks
+POST /reset               start new episode  {"task_id": "easy_lr_divergence", "seed": 42}
+POST /step                take action        {"task_id": "...", "action": {"action_type": "...", "parameters": {}}}
+GET  /state               current state      ?task_id=easy_lr_divergence
+POST /close               get final score    {"task_id": "..."}
 ```
 
 ### Run Inference
@@ -103,25 +176,48 @@ docker run -p 7860:7860 ml-debug-env
 export API_BASE_URL="https://api-inference.huggingface.co/v1"
 export MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
 export HF_TOKEN="your_hf_token"
+
 python inference.py
+```
+
+Output format:
+```
+[START] task=easy_lr_divergence env=ml-training-debugger model=meta-llama/Llama-3.1-8B-Instruct
+[STEP]  step=1 action=inspect_logs reward=0.05 done=false error=null
+[STEP]  step=2 action=diagnose_issue reward=0.20 done=false error=null
+[STEP]  step=3 action=modify_config reward=0.30 done=false error=null
+[STEP]  step=4 action=submit_diagnosis reward=0.90 done=true error=null
+[END]   success=true steps=4 score=0.90 rewards=0.05,0.20,0.30,0.90
 ```
 
 ---
 
-## Baseline Scores
+## Reproducibility
 
-| Task | Score | Difficulty |
-|---|---|---|
-| easy_lr_divergence | ~0.80 | Easy |
-| medium_data_leakage | ~0.65 | Medium |
-| hard_overfitting_cascade | ~0.45 | Hard |
+Pass a `seed` to `reset()` for fully reproducible episodes:
+
+```python
+obs = env.reset(seed=42)   # identical scenario every time
+obs = env.reset()          # randomized scenario
+```
+
+The inference baseline uses `seed=42` for all tasks.
 
 ---
 
-## API Endpoints
+## Real-World Relevance
 
-- `POST /reset` — Start new episode `{"task_id": "easy_lr_divergence"}`
-- `POST /step` — Take action `{"task_id": "...", "action": {"action_type": "...", "parameters": {}}}`
-- `GET /state` — Get current state `?task_id=easy_lr_divergence`
-- `POST /close` — Get final graded score
-- `GET /tasks` — List all tasks
+This environment models debugging workflows that ML engineers perform daily:
+
+- Diagnosing diverging training runs
+- Detecting data contamination in evaluation pipelines
+- Identifying overfitting from regularization gaps
+- Debugging multi-cause failures with overlapping symptoms
+
+An agent trained on this environment develops systematic debugging strategies directly applicable to real ML infrastructure.
+
+---
+
+## Team
+
+TriStack — OpenEnv Hackathon 2025
