@@ -25,7 +25,8 @@ from environment.tasks import TASKS
 # ── Config ─────────────────────────────────────────────────────────────────────
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN", "")
+# Support both HF_TOKEN and OPENAI_API_KEY as per hackathon spec
+HF_TOKEN = os.getenv("HF_TOKEN", os.getenv("OPENAI_API_KEY", ""))
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
