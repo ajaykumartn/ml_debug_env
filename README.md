@@ -248,4 +248,4 @@ An agent trained on this environment develops systematic debugging strategies di
 
 ## Team
 
-TriStack — OpenEnv Hackathon 2025
+TriStack — OpenEnv Hackathon 2026
