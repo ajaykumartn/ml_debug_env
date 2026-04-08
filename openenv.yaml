@@ -1,10 +1,12 @@
 name: ml-training-debugger
-version: 1.0.0
+version: "1.0.0"
 description: >
-  An RL environment where an AI agent debugs broken ML training runs.
+  An OpenEnv environment where an AI agent debugs broken ML training runs.
   The agent inspects training logs, metrics, and configurations to identify
-  root causes (diverging loss, data leakage, overfitting) and apply correct fixes.
+  root causes and apply correct fixes — mirroring real-world ML engineering workflows.
+
 author: TriStack Team
+license: MIT
 tags:
   - openenv
   - ml-debugging
@@ -12,58 +14,177 @@ tags:
   - real-world
 
 tasks:
-  - id: easy_lr_divergence
+  - id: 0
+    name: easy_lr_divergence
     difficulty: easy
     description: Fix a diverging training loss caused by a misconfigured learning rate
-  - id: medium_wrong_loss
+
+  - id: 1
+    name: medium_wrong_loss
     difficulty: medium
     description: Fix wrong loss function causing accuracy to stay near random baseline
-  - id: medium_data_leakage
+
+  - id: 2
+    name: medium_data_leakage
     difficulty: medium
     description: Detect and fix data leakage causing unrealistically high validation accuracy
-  - id: hard_overfitting_cascade
+
+  - id: 3
+    name: hard_overfitting_cascade
     difficulty: hard
     description: Diagnose and fix cascading overfitting from multiple missing regularization settings
-  - id: hard_dual_bug
+
+  - id: 4
+    name: hard_dual_bug
     difficulty: hard
     description: Debug two simultaneous failures — overfitting and learning rate instability
 
-observation_space:
-  type: object
-  fields:
-    task_id: string
-    step: integer
-    training_logs: list[string]
-    metrics_history: list[TrainingMetrics]
-    current_config: TrainingConfig
-    system_alerts: list[string]
-    available_actions: list[string]
-    diagnosis_history: list[string]
-    fix_history: list[string]
-    is_training_healthy: boolean
-
 action_space:
-  type: object
-  fields:
-    action_type:
-      type: string
-      enum:
-        - inspect_logs
-        - inspect_metrics
-        - inspect_config
-        - check_data
-        - diagnose_issue
-        - modify_config
-        - apply_fix
-        - restart_training
-        - submit_diagnosis
-    parameters:
-      type: object
+  - name: inspect_logs
+    description: Read training log lines
+    fields:
+      - name: action_type
+        type: string
+        required: true
+        value: "inspect_logs"
 
-reward_range: [0.0, 1.0]
+  - name: inspect_metrics
+    description: Examine epoch-level metrics
+    fields:
+      - name: action_type
+        type: string
+        required: true
+        value: "inspect_metrics"
+
+  - name: inspect_config
+    description: View current hyperparameter config
+    fields:
+      - name: action_type
+        type: string
+        required: true
+        value: "inspect_config"
+
+  - name: check_data
+    description: Inspect data pipeline and splits
+    fields:
+      - name: action_type
+        type: string
+        required: true
+        value: "check_data"
+
+  - name: diagnose_issue
+    description: Submit root cause diagnosis
+    fields:
+      - name: action_type
+        type: string
+        required: true
+        value: "diagnose_issue"
+      - name: diagnosis
+        type: string
+        required: true
+
+  - name: modify_config
+    description: Change a hyperparameter value
+    fields:
+      - name: action_type
+        type: string
+        required: true
+        value: "modify_config"
+      - name: key
+        type: string
+        required: true
+      - name: value
+        type: any
+        required: true
+
+  - name: apply_fix
+    description: Apply a structural fix to the data pipeline
+    fields:
+      - name: action_type
+        type: string
+        required: true
+        value: "apply_fix"
+      - name: fix_type
+        type: string
+        required: true
+
+  - name: submit_diagnosis
+    description: Finalize episode and trigger grading
+    fields:
+      - name: action_type
+        type: string
+        required: true
+        value: "submit_diagnosis"
+
+observation_space:
+  - name: task_id
+    type: string
+    description: Current task identifier
+
+  - name: step
+    type: integer
+    description: Current step number
+
+  - name: training_logs
+    type: list[string]
+    description: Training log lines
+
+  - name: metrics_history
+    type: list[object]
+    description: Per-epoch loss, accuracy, gradient norms
+
+  - name: current_config
+    type: object
+    description: Current hyperparameter configuration
+
+  - name: system_alerts
+    type: list[string]
+    description: Critical warnings and error alerts
+
+  - name: available_actions
+    type: list[string]
+    description: Valid action types
+
+  - name: diagnosis_history
+    type: list[string]
+    description: Agent's previous diagnoses
+
+  - name: fix_history
+    type: list[string]
+    description: Agent's previously applied fixes
+
+  - name: is_training_healthy
+    type: boolean
+    description: Whether current config resolves the issue
+
+reward:
+  range: [0.0, 1.0]
+  description: >
+    Partial rewards at every step. Not sparse — signal throughout trajectory.
+  components:
+    - name: exploration
+      weight: 0.05
+      description: Reward for inspecting signals (logs, metrics, config, data)
+    - name: diagnosis
+      weight: 0.20
+      description: Reward for correct root cause diagnosis
+    - name: fix
+      weight: 0.15-0.30
+      description: Partial reward per correct fix applied
+    - name: final_score
+      weight: variable
+      description: Graded score on submit_diagnosis (0.0-1.0)
 
 endpoints:
   reset: POST /reset
   step: POST /step
   state: GET /state
   close: POST /close
+  tasks: GET /tasks
+  validate: GET /validate
+
+settings:
+  max_steps_easy: 10
+  max_steps_medium: 15
+  max_steps_hard: 25
+  n_tasks: 5
