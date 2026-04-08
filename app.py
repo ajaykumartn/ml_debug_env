@@ -67,9 +67,12 @@ def reset_get(task_id: str = Query(default="easy_lr_divergence"), seed: Optional
 
 
 @app.post("/reset")
-def reset_post(req: ResetRequest):
-    env = _get_env(req.task_id)
-    obs = env.reset(seed=req.seed)
+def reset_post(req: Optional[ResetRequest] = None):
+    """POST reset — body is optional, defaults to easy_lr_divergence."""
+    task_id = req.task_id if req else "easy_lr_divergence"
+    seed = req.seed if req else None
+    env = _get_env(task_id)
+    obs = env.reset(seed=seed)
     return obs.model_dump()
 
 
@@ -95,8 +98,9 @@ def state(task_id: str = Query(default="easy_lr_divergence")):
 
 
 @app.post("/close")
-def close(req: CloseRequest):
-    env = _get_env(req.task_id)
+def close(req: Optional[CloseRequest] = None):
+    task_id = req.task_id if req else "easy_lr_divergence"
+    env = _get_env(task_id)
     result = env.close()
     return result
 
