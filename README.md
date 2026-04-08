@@ -26,7 +26,18 @@ An RL environment where an AI agent debugs broken ML training runs. The agent in
 
 ## Motivation
 
-Every ML engineer has spent hours debugging a training run that won't converge. Loss diverges, models overfit, data leaks into validation sets, gradients vanish. This environment turns those real debugging scenarios into a structured RL benchmark — enabling agents to learn systematic debugging strategies that transfer to real ML workflows.
+ML training failures cost the industry millions of hours annually. A single misconfigured learning rate, a data leakage bug, or missing regularization can waste days of GPU compute and delay model releases. Today, every ML engineer at every AI company debugs these failures manually — reading logs, cross-referencing metrics, and applying fixes through trial and error.
+
+This environment turns that real debugging workflow into a structured RL benchmark. An agent trained here learns to:
+
+- Systematically inspect multiple signals before acting (logs, metrics, config, data pipeline)
+- Reason across correlated symptoms to identify root causes
+- Apply targeted fixes rather than random hyperparameter searches
+- Handle multi-cause failures where symptoms overlap and mislead
+
+Unlike toy environments, every scenario in this benchmark maps directly to failures that engineers at Meta, Google, and Hugging Face encounter in production. An agent that scores well here is an agent that could genuinely assist in real MLOps workflows — reducing debugging time from hours to seconds.
+
+The environment is designed to be unsolvable by random action (lazy agent scores 0.10 on hard tasks) but tractable for capable reasoning models (perfect agent scores 0.95–1.0), making it a meaningful benchmark for evaluating LLM reasoning quality in technical domains.
 
 ---
 
