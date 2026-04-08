@@ -33,38 +33,40 @@ client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
 ENV_NAME = "ml-training-debugger"
 
-SYSTEM_PROMPT = """You are an ML engineer. Debug the broken training run by following these steps IN ORDER:
+SYSTEM_PROMPT = """You are an expert ML engineer debugging a broken training run.
 
-Step 1: {"action_type": "inspect_logs", "parameters": {}}
-Step 2: {"action_type": "inspect_metrics", "parameters": {}}
-Step 3: {"action_type": "inspect_config", "parameters": {}}
-Step 4: {"action_type": "check_data", "parameters": {}}
-Step 5: {"action_type": "diagnose_issue", "parameters": {"diagnosis": "PICK_ONE"}}
-Step 6: Apply fix with modify_config or apply_fix
-Step 7: {"action_type": "submit_diagnosis", "parameters": {}}
+You will receive training logs, metrics, config, and alerts. Your job:
+1. Inspect signals (logs, metrics, config, data)
+2. Identify the root cause
+3. Apply the correct fix
+4. Submit your diagnosis
 
-DIAGNOSES - pick the one that matches the alerts:
-- "learning_rate_too_high" → loss is NaN/Inf, diverging, gradient_norm > 100
-- "wrong_loss_function" → accuracy stuck near random baseline, MSE on classification
-- "data_leakage" → val_loss much lower than train_loss, val_accuracy unrealistically high
-- "overfitting_cascade" → train_acc >> val_acc, val_loss increasing, no dropout/weight_decay
-- "vanishing_gradient" → gradient_norm near 0, loss not moving
-
-FIX ACTIONS:
-- {"action_type": "modify_config", "parameters": {"key": "learning_rate", "value": 0.001}}
-- {"action_type": "modify_config", "parameters": {"key": "loss_function", "value": "cross_entropy"}}
-- {"action_type": "modify_config", "parameters": {"key": "dropout_rate", "value": 0.3}}
-- {"action_type": "modify_config", "parameters": {"key": "weight_decay", "value": 0.001}}
-- {"action_type": "modify_config", "parameters": {"key": "epochs", "value": 20}}
+VALID ACTION TYPES (respond with JSON only, one action per turn):
+- {"action_type": "inspect_logs", "parameters": {}}
+- {"action_type": "inspect_metrics", "parameters": {}}
+- {"action_type": "inspect_config", "parameters": {}}
+- {"action_type": "check_data", "parameters": {}}
+- {"action_type": "diagnose_issue", "parameters": {"diagnosis": "<string>"}}
+- {"action_type": "modify_config", "parameters": {"key": "<key>", "value": <value>}}
 - {"action_type": "apply_fix", "parameters": {"fix_type": "fix_data_split", "train": 0.8, "val": 0.2}}
+- {"action_type": "submit_diagnosis", "parameters": {}}
 
-IMPORTANT: Reply with ONLY a JSON object. No explanation. No text. Just JSON."""
+VALID DIAGNOSIS STRINGS (use exact string):
+learning_rate_too_high, learning_rate_too_low, wrong_loss_function,
+data_leakage, vanishing_gradient, exploding_gradient_optimizer_mismatch,
+overfitting_cascade, underfitting, batch_size_issue, scheduler_misconfiguration
+
+VALID CONFIG KEYS for modify_config:
+learning_rate, batch_size, optimizer, loss_function, epochs,
+dropout_rate, weight_decay, gradient_clip, scheduler
+
+WORKFLOW: inspect → diagnose → fix → submit_diagnosis
+RULE: Respond with a single JSON object only. No explanation text."""
 
 
 def build_user_prompt(obs: dict) -> str:
     metrics = obs['metrics_history'][-5:]
-    # Summarize metrics for clarity
-    metric_summary = []
+    metric_lines = []
     for m in metrics:
         line = f"  epoch={m['epoch']} train_loss={m['train_loss']}"
         if m.get('val_loss') is not None:
@@ -75,48 +77,38 @@ def build_user_prompt(obs: dict) -> str:
             line += f" val_acc={m['val_accuracy']}"
         if m.get('gradient_norm') is not None:
             line += f" grad_norm={m['gradient_norm']}"
-        metric_summary.append(line)
+        metric_lines.append(line)
 
-    already_done = []
+    # Build progress context
+    progress = []
     if obs['diagnosis_history']:
-        already_done.append(f"Diagnosed: {obs['diagnosis_history'][-1]}")
+        progress.append(f"diagnosis_made: {obs['diagnosis_history'][-1]}")
     if obs['fix_history']:
-        already_done.append(f"Fixed: {', '.join(obs['fix_history'])}")
-
-    # Tell agent what to do next based on progress
-    if obs['diagnosis_history'] and not obs['fix_history']:
-        next_step = f"\nYou have diagnosed: {obs['diagnosis_history'][-1]}. Now apply the fix using modify_config or apply_fix, then call submit_diagnosis."
+        progress.append(f"fixes_applied: {obs['fix_history']}")
+    if obs['is_training_healthy']:
+        progress.append("is_training_healthy: true — ready to submit_diagnosis")
+    elif obs['diagnosis_history'] and not obs['fix_history']:
+        progress.append("next: apply fix with modify_config or apply_fix")
     elif obs['diagnosis_history'] and obs['fix_history']:
-        next_step = "\nFix applied. Call submit_diagnosis to finalize."
-    else:
-        next_step = ""
+        progress.append("next: call submit_diagnosis to finalize")
 
-    return f"""=== ML DEBUG SESSION | Task: {obs['task_id']} | Step: {obs['step']} ===
-
-TRAINING LOGS:
-{chr(10).join(obs['training_logs'])}
-
-SYSTEM ALERTS:
-{chr(10).join(obs['system_alerts'])}
-
-CURRENT CONFIG:
-  learning_rate={obs['current_config']['learning_rate']}
-  optimizer={obs['current_config']['optimizer']}
-  loss_function={obs['current_config']['loss_function']}
-  epochs={obs['current_config']['epochs']}
-  dropout_rate={obs['current_config']['dropout_rate']}
-  weight_decay={obs['current_config']['weight_decay']}
-  gradient_clip={obs['current_config']['gradient_clip']}
-  data_split={obs['current_config'].get('data_split')}
-
-METRICS (recent epochs):
-{chr(10).join(metric_summary) if metric_summary else '  No metrics yet'}
-
-PROGRESS SO FAR:
-{chr(10).join(already_done) if already_done else '  Nothing done yet'}
-is_training_healthy: {obs['is_training_healthy']}{next_step}
-
-What is your next action? Reply with JSON only:"""
+    return (
+        f"Task: {obs['task_id']} | Step: {obs['step']}\n\n"
+        f"TRAINING LOGS:\n" + "\n".join(obs['training_logs']) + "\n\n"
+        f"SYSTEM ALERTS:\n" + "\n".join(obs['system_alerts']) + "\n\n"
+        f"CURRENT CONFIG:\n"
+        f"  learning_rate={obs['current_config']['learning_rate']}\n"
+        f"  optimizer={obs['current_config']['optimizer']}\n"
+        f"  loss_function={obs['current_config']['loss_function']}\n"
+        f"  epochs={obs['current_config']['epochs']}\n"
+        f"  dropout_rate={obs['current_config']['dropout_rate']}\n"
+        f"  weight_decay={obs['current_config']['weight_decay']}\n"
+        f"  gradient_clip={obs['current_config']['gradient_clip']}\n"
+        f"  data_split={obs['current_config'].get('data_split')}\n\n"
+        f"METRICS (last 5 epochs):\n" + ("\n".join(metric_lines) if metric_lines else "  none") + "\n\n"
+        f"PROGRESS:\n" + ("\n".join(f"  {p}" for p in progress) if progress else "  none") + "\n\n"
+        f"What is your next action? Reply with JSON only:"
+    )
 
 
 def call_llm(messages: list, retries: int = 2) -> dict:
