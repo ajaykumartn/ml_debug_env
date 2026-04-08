@@ -15,6 +15,9 @@ dependencies = [
     "openenv-core>=0.2.0",
 ]
 
+[project.scripts]
+server = "server.app:main"
+
 [project.urls]
 Homepage = "https://huggingface.co/spaces/ajaytn/ml-training-debugger"
 
