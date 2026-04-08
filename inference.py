@@ -23,10 +23,11 @@ from environment.models import Action
 from environment.tasks import TASKS
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-MODEL_NAME = os.getenv("MODEL_NAME") or "meta-llama/Llama-3.1-8B-Instruct"
-# Support HF_TOKEN, OPENAI_API_KEY, and API_KEY as per hackathon sample script
-HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY") or ""
+# Defaults set only for API_BASE_URL and MODEL_NAME (not HF_TOKEN) — per hackathon spec
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
+HF_TOKEN = os.getenv("HF_TOKEN")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")  # optional, if using from_docker_image()
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
@@ -158,20 +159,23 @@ def call_llm(messages: list, retries: int = 2) -> dict:
     elif step_num == 4:
         return {"action_type": "check_data", "parameters": {}}
     else:
-        # Force a diagnosis attempt based on task context
+        # Force a diagnosis attempt based on task context from alerts
         last_obs = messages[-1]["content"] if messages else ""
-        if "NaN" in last_obs or "diverging" in last_obs or "gradient" in last_obs:
+        if "NaN" in last_obs or "diverging" in last_obs or "learning_rate" in last_obs.lower():
             return {"action_type": "diagnose_issue",
                     "parameters": {"diagnosis": "learning_rate_too_high"}}
-        elif "val_loss" in last_obs and "train_loss" in last_obs:
+        elif "overlap" in last_obs or "leakage" in last_obs or "contamination" in last_obs:
             return {"action_type": "diagnose_issue",
                     "parameters": {"diagnosis": "data_leakage"}}
-        elif "overfitting" in last_obs or "val_acc" in last_obs:
+        elif "overfitting" in last_obs or ("train_acc" in last_obs and "val_acc" in last_obs):
             return {"action_type": "diagnose_issue",
                     "parameters": {"diagnosis": "overfitting_cascade"}}
-        elif "MSE" in last_obs or "accuracy" in last_obs:
+        elif "MSE" in last_obs or "random baseline" in last_obs or "accuracy stuck" in last_obs:
             return {"action_type": "diagnose_issue",
                     "parameters": {"diagnosis": "wrong_loss_function"}}
+        elif "gradient_norm" in last_obs and "0.000" in last_obs:
+            return {"action_type": "diagnose_issue",
+                    "parameters": {"diagnosis": "vanishing_gradient"}}
         else:
             return {"action_type": "submit_diagnosis", "parameters": {}}
 

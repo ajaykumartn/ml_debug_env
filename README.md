@@ -134,17 +134,17 @@ Partial credit is awarded per correct fix in a sequence. Value matching uses 5% 
 
 ## Baseline Scores
 
-Scores from `inference.py` with `seed=42` using `meta-llama/Llama-3.1-8B-Instruct`:
+Scores from `inference.py` with `seed=42` using `meta-llama/Llama-3.3-70B-Instruct` on `router.huggingface.co`:
 
 | Task | Score | Notes |
 |---|---|---|
-| easy_lr_divergence | ~0.40 | 8B model partially solves |
-| medium_wrong_loss | ~0.20 | Requires stronger reasoning |
-| medium_data_leakage | ~0.20 | Requires stronger reasoning |
-| hard_overfitting_cascade | ~0.20 | Requires frontier model |
-| hard_dual_bug | ~0.20 | Requires frontier model |
+| easy_lr_divergence | 0.90 | Solved correctly in 7 steps |
+| medium_wrong_loss | 0.20 | Requires precise diagnosis string matching |
+| medium_data_leakage | 0.20 | Requires multi-signal reasoning |
+| hard_overfitting_cascade | 0.20 | Requires frontier model + multi-fix sequence |
+| hard_dual_bug | 0.20 | Requires frontier model + dual-bug reasoning |
 
-A frontier model (70B+) is expected to score 0.80–1.0 on easy/medium tasks and 0.60–0.95 on hard tasks. The environment is intentionally designed to challenge capable models while being unsolvable by random action.
+A perfect agent scores 0.90–1.0 on all tasks. The environment is intentionally designed so that only agents that correctly identify the exact root cause and apply the right fix sequence score high — partial credit is awarded for correct diagnosis and each correct fix applied.
 
 ---
 
