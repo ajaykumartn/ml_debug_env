@@ -83,6 +83,14 @@ def build_user_prompt(obs: dict) -> str:
     if obs['fix_history']:
         already_done.append(f"Fixed: {', '.join(obs['fix_history'])}")
 
+    # Tell agent what to do next based on progress
+    if obs['diagnosis_history'] and not obs['fix_history']:
+        next_step = f"\nYou have diagnosed: {obs['diagnosis_history'][-1]}. Now apply the fix using modify_config or apply_fix, then call submit_diagnosis."
+    elif obs['diagnosis_history'] and obs['fix_history']:
+        next_step = "\nFix applied. Call submit_diagnosis to finalize."
+    else:
+        next_step = ""
+
     return f"""=== ML DEBUG SESSION | Task: {obs['task_id']} | Step: {obs['step']} ===
 
 TRAINING LOGS:
@@ -106,7 +114,7 @@ METRICS (recent epochs):
 
 PROGRESS SO FAR:
 {chr(10).join(already_done) if already_done else '  Nothing done yet'}
-is_training_healthy: {obs['is_training_healthy']}
+is_training_healthy: {obs['is_training_healthy']}{next_step}
 
 What is your next action? Reply with JSON only:"""
 
@@ -143,6 +151,36 @@ def call_llm(messages: list, retries: int = 2) -> dict:
 
             parsed = json.loads(content)
             if "action_type" in parsed:
+                # Normalize diagnosis strings — LLMs often return shortened versions
+                if parsed.get("action_type") == "diagnose_issue":
+                    diag = parsed.get("parameters", {}).get("diagnosis", "")
+                    valid = {
+                        "learning_rate_too_high", "learning_rate_too_low",
+                        "wrong_loss_function", "data_leakage", "vanishing_gradient",
+                        "exploding_gradient_optimizer_mismatch", "overfitting_cascade",
+                        "underfitting", "batch_size_issue", "scheduler_misconfiguration"
+                    }
+                    if diag not in valid:
+                        # Map common LLM shorthand to valid strings
+                        mapping = {
+                            "overfitting": "overfitting_cascade",
+                            "overfit": "overfitting_cascade",
+                            "learning_rate": "learning_rate_too_high",
+                            "high_learning_rate": "learning_rate_too_high",
+                            "lr_too_high": "learning_rate_too_high",
+                            "wrong_loss": "wrong_loss_function",
+                            "loss_function": "wrong_loss_function",
+                            "mse_loss": "wrong_loss_function",
+                            "data_leak": "data_leakage",
+                            "leakage": "data_leakage",
+                            "vanishing": "vanishing_gradient",
+                            "gradient_vanishing": "vanishing_gradient",
+                            "exploding_gradient": "exploding_gradient_optimizer_mismatch",
+                        }
+                        normalized = mapping.get(diag.lower().replace(" ", "_"))
+                        if normalized:
+                            parsed["parameters"]["diagnosis"] = normalized
+                        # else let env handle the invalid diagnosis
                 return parsed
         except Exception:
             pass
