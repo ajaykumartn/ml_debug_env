@@ -32,38 +32,32 @@ client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
 ENV_NAME = "ml-training-debugger"
 
-SYSTEM_PROMPT = """You are a senior ML engineer debugging a broken training run.
-You will receive training logs, metrics, configuration, and system alerts.
-Your goal is to identify the root cause and apply the correct fix.
+SYSTEM_PROMPT = """You are an ML engineer. Debug the broken training run by following these steps IN ORDER:
 
-WORKFLOW:
-1. Inspect available signals (logs, metrics, config, data)
-2. Reason about what the signals indicate
-3. Submit your diagnosis
-4. Apply the appropriate fix(es)
-5. Call submit_diagnosis to finalize
+Step 1: {"action_type": "inspect_logs", "parameters": {}}
+Step 2: {"action_type": "inspect_metrics", "parameters": {}}
+Step 3: {"action_type": "inspect_config", "parameters": {}}
+Step 4: {"action_type": "check_data", "parameters": {}}
+Step 5: {"action_type": "diagnose_issue", "parameters": {"diagnosis": "PICK_ONE"}}
+Step 6: Apply fix with modify_config or apply_fix
+Step 7: {"action_type": "submit_diagnosis", "parameters": {}}
 
-AVAILABLE ACTIONS (respond with JSON only):
-- {"action_type": "inspect_logs", "parameters": {}}
-- {"action_type": "inspect_metrics", "parameters": {}}
-- {"action_type": "inspect_config", "parameters": {}}
-- {"action_type": "check_data", "parameters": {}}
-- {"action_type": "diagnose_issue", "parameters": {"diagnosis": "<diagnosis>"}}
-- {"action_type": "modify_config", "parameters": {"key": "<key>", "value": <value>}}
-  Valid config keys: learning_rate, batch_size, optimizer, loss_function, epochs, dropout_rate, weight_decay, gradient_clip, scheduler
+DIAGNOSES - pick the one that matches the alerts:
+- "learning_rate_too_high" → loss is NaN/Inf, diverging, gradient_norm > 100
+- "wrong_loss_function" → accuracy stuck near random baseline, MSE on classification
+- "data_leakage" → val_loss much lower than train_loss, val_accuracy unrealistically high
+- "overfitting_cascade" → train_acc >> val_acc, val_loss increasing, no dropout/weight_decay
+- "vanishing_gradient" → gradient_norm near 0, loss not moving
+
+FIX ACTIONS:
+- {"action_type": "modify_config", "parameters": {"key": "learning_rate", "value": 0.001}}
+- {"action_type": "modify_config", "parameters": {"key": "loss_function", "value": "cross_entropy"}}
+- {"action_type": "modify_config", "parameters": {"key": "dropout_rate", "value": 0.3}}
+- {"action_type": "modify_config", "parameters": {"key": "weight_decay", "value": 0.001}}
+- {"action_type": "modify_config", "parameters": {"key": "epochs", "value": 20}}
 - {"action_type": "apply_fix", "parameters": {"fix_type": "fix_data_split", "train": 0.8, "val": 0.2}}
-- {"action_type": "submit_diagnosis", "parameters": {}}
 
-VALID DIAGNOSIS STRINGS:
-learning_rate_too_high, learning_rate_too_low, wrong_loss_function,
-data_leakage, vanishing_gradient, exploding_gradient_optimizer_mismatch,
-overfitting_cascade, underfitting, batch_size_issue, scheduler_misconfiguration
-
-RULES:
-- Respond with a single JSON object, nothing else
-- Do not repeat the same action twice in a row
-- Always call submit_diagnosis when you are confident in your fix
-- Base your diagnosis on the evidence in the logs, metrics, and alerts"""
+IMPORTANT: Reply with ONLY a JSON object. No explanation. No text. Just JSON."""
 
 
 def build_user_prompt(obs: dict) -> str:
@@ -148,20 +142,47 @@ def call_llm(messages: list, retries: int = 2) -> dict:
 
             parsed = json.loads(content)
             if "action_type" in parsed:
+                # Validate diagnosis string if present
+                if parsed.get("action_type") == "diagnose_issue":
+                    diag = parsed.get("parameters", {}).get("diagnosis", "")
+                    valid = ["learning_rate_too_high","learning_rate_too_low",
+                             "wrong_loss_function","data_leakage","vanishing_gradient",
+                             "exploding_gradient_optimizer_mismatch","overfitting_cascade",
+                             "underfitting","batch_size_issue","scheduler_misconfiguration"]
+                    if diag not in valid:
+                        continue  # retry with next attempt
                 return parsed
         except Exception:
             pass
 
-    # Smart fallback based on step count in last message
-    last_msg = messages[-1]["content"] if messages else ""
-    if "Step: 0" in last_msg or "Step: 1" in last_msg:
+    # Progressive fallback — advance through workflow based on step number
+    # Count steps from message history
+    step_num = sum(1 for m in messages if m["role"] == "user")
+    if step_num <= 1:
         return {"action_type": "inspect_logs", "parameters": {}}
-    elif "Step: 2" in last_msg:
+    elif step_num == 2:
         return {"action_type": "inspect_metrics", "parameters": {}}
-    elif "Step: 3" in last_msg:
+    elif step_num == 3:
+        return {"action_type": "inspect_config", "parameters": {}}
+    elif step_num == 4:
         return {"action_type": "check_data", "parameters": {}}
     else:
-        return {"action_type": "inspect_config", "parameters": {}}
+        # Force a diagnosis attempt based on task context
+        last_obs = messages[-1]["content"] if messages else ""
+        if "NaN" in last_obs or "diverging" in last_obs or "gradient" in last_obs:
+            return {"action_type": "diagnose_issue",
+                    "parameters": {"diagnosis": "learning_rate_too_high"}}
+        elif "val_loss" in last_obs and "train_loss" in last_obs:
+            return {"action_type": "diagnose_issue",
+                    "parameters": {"diagnosis": "data_leakage"}}
+        elif "overfitting" in last_obs or "val_acc" in last_obs:
+            return {"action_type": "diagnose_issue",
+                    "parameters": {"diagnosis": "overfitting_cascade"}}
+        elif "MSE" in last_obs or "accuracy" in last_obs:
+            return {"action_type": "diagnose_issue",
+                    "parameters": {"diagnosis": "wrong_loss_function"}}
+        else:
+            return {"action_type": "submit_diagnosis", "parameters": {}}
 
 
 def run_task(task_id: str, seed: int = 42) -> dict:
