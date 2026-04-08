@@ -124,7 +124,8 @@ def call_llm(messages: list, retries: int = 2) -> dict:
                 model=MODEL_NAME,
                 messages=messages,
                 max_tokens=128,
-                temperature=0.1,  # low temp = more deterministic
+                temperature=0.1,
+                stream=False,
             )
             content = response.choices[0].message.content.strip()
 
@@ -218,10 +219,16 @@ def run_task(task_id: str, seed: int = 42) -> dict:
 
         final_result = env.close()
         score = final_result.get("score", 0.0)
+        # Clamp to [0, 1] as per sample script
+        score = min(max(score, 0.0), 1.0)
         success = final_result.get("passed", False)
 
     except Exception as e:
-        # Ensure [END] always emits
+        # Ensure [END] always emits even on exception
+        try:
+            env.close()
+        except Exception:
+            pass
         score = 0.0
         success = False
         if not rewards:
