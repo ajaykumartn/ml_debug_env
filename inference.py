@@ -23,7 +23,7 @@ from environment.models import Action
 from environment.tasks import TASKS
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://api-inference.huggingface.co/v1"
+API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 MODEL_NAME = os.getenv("MODEL_NAME") or "meta-llama/Llama-3.1-8B-Instruct"
 # Support HF_TOKEN, OPENAI_API_KEY, and API_KEY as per hackathon sample script
 HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY") or ""
@@ -142,15 +142,6 @@ def call_llm(messages: list, retries: int = 2) -> dict:
 
             parsed = json.loads(content)
             if "action_type" in parsed:
-                # Validate diagnosis string if present
-                if parsed.get("action_type") == "diagnose_issue":
-                    diag = parsed.get("parameters", {}).get("diagnosis", "")
-                    valid = ["learning_rate_too_high","learning_rate_too_low",
-                             "wrong_loss_function","data_leakage","vanishing_gradient",
-                             "exploding_gradient_optimizer_mismatch","overfitting_cascade",
-                             "underfitting","batch_size_issue","scheduler_misconfiguration"]
-                    if diag not in valid:
-                        continue  # retry with next attempt
                 return parsed
         except Exception:
             pass

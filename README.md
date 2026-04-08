@@ -136,13 +136,15 @@ Partial credit is awarded per correct fix in a sequence. Value matching uses 5% 
 
 Scores from `inference.py` with `seed=42` using `meta-llama/Llama-3.1-8B-Instruct`:
 
-| Task | Score | Passed |
+| Task | Score | Notes |
 |---|---|---|
-| easy_lr_divergence | ~0.90 | Yes |
-| medium_wrong_loss | ~0.85 | Yes |
-| medium_data_leakage | ~0.75 | Yes |
-| hard_overfitting_cascade | ~0.65 | Yes |
-| hard_dual_bug | ~0.55 | Yes |
+| easy_lr_divergence | ~0.40 | 8B model partially solves |
+| medium_wrong_loss | ~0.20 | Requires stronger reasoning |
+| medium_data_leakage | ~0.20 | Requires stronger reasoning |
+| hard_overfitting_cascade | ~0.20 | Requires frontier model |
+| hard_dual_bug | ~0.20 | Requires frontier model |
+
+A frontier model (70B+) is expected to score 0.80–1.0 on easy/medium tasks and 0.60–0.95 on hard tasks. The environment is intentionally designed to challenge capable models while being unsolvable by random action.
 
 ---
 
